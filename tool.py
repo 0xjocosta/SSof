@@ -41,8 +41,6 @@ def printRegisters(nameFunction):
     print "-------------REGISTERS: " + nameFunction + "-----------"
 
 
-
-
 def inspectVulnerability(variables, instruction, nameFunction, index):
     destAddress = registersOfFunctions[nameFunction][registersOrder[0]]
     destVariable = {}
@@ -51,14 +49,15 @@ def inspectVulnerability(variables, instruction, nameFunction, index):
         if variable[CONST_ADDRESS] in destAddress:
             destVariable = variable
     
-
+    #fgets
     if index == 0:
         sizeOfBuffer = hex(destVariable[CONST_BYTES])
         sizeOfInput = registersOfFunctions[nameFunction][CONST_ESI]
         if sizeOfInput > sizeOfBuffer:
             print "Exists Vulnerability: " + dangerousFunctions[index]
             return True
-
+    
+    #strcpy
     if index == 1:
         srcAddress = registersOfFunctions[nameFunction][registersOrder[1]]
         srcVariable = {}
@@ -72,7 +71,7 @@ def inspectVulnerability(variables, instruction, nameFunction, index):
         if sizeOfSrcVariable > sizeOfBuffer:
             print "Exists Vulnerability: " + dangerousFunctions[index] 
             return True
-
+    #gets
     if index == 6:
        return False
     
