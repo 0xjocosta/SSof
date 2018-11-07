@@ -67,7 +67,7 @@ def inspectVulnerability(variables, instruction, nameFunction, index):
                     srcVariable = variable
         
         sizeOfSrcVariable = hex(srcVariable[CONST_BYTES])
-        sizeOfBuffer = registersOfFunctions[nameFunction][CONST_ESI]
+        sizeOfBuffer = hex(destVariable[CONST_BYTES])
         if sizeOfSrcVariable > sizeOfBuffer:
             print "Exists Vulnerability: " + dangerousFunctions[index] 
             return True
