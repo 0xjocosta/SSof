@@ -34,6 +34,9 @@ registersOrder = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
 #Program JSON
 jsonProgram = {}
 
+#Variables from JSON Program
+variablesProgram = []
+
 def printRegisters(nameFunction):
     print "-------------REGISTERS: " + nameFunction + "-----------"
     for register in registersOfFunctions[nameFunction]:
@@ -41,14 +44,17 @@ def printRegisters(nameFunction):
     print "-------------REGISTERS: " + nameFunction + "-----------"
 
 
-def inspectVulnerability(variables, instruction, nameFunction, index):
+def inspectVulnerability(instruction, nameFunction, index):
     destAddress = registersOfFunctions[nameFunction][registersOrder[0]]
     destVariable = {}
+    
+    idxDestVariable = 0
 
-    for variable in variables:
+    for variable in variablesProgram:
         if variable[CONST_ADDRESS] in destAddress:
             destVariable = variable
-    
+            idxDestVariable = variablesProgram.index(variable)
+     
     #fgets
     if index == 0:
         sizeOfBuffer = hex(destVariable[CONST_BYTES])
@@ -56,25 +62,28 @@ def inspectVulnerability(variables, instruction, nameFunction, index):
         if sizeOfInput > sizeOfBuffer:
             print "Exists Vulnerability: " + dangerousFunctions[index]
             return True
+        else:
+            variablesProgram[idxDestVariable][CONST_BYTES] = int(sizeOfInput, 0)
     
-    #strcpy
-    if index == 1:
+    #strcpy, strcat, strncpy, strncat
+    if index == 1 or index == 2 or index == 7 or index == 8:
         srcAddress = registersOfFunctions[nameFunction][registersOrder[1]]
         srcVariable = {}
-        for function in jsonProgram:
-            for variable in jsonProgram[function][CONST_VARIABLES]:
-                if variable[CONST_ADDRESS] in srcAddress:
-                    srcVariable = variable
+        for variable in variablesProgram:
+            if variable[CONST_ADDRESS] in srcAddress:
+                srcVariable = variable
         
         sizeOfSrcVariable = hex(srcVariable[CONST_BYTES])
         sizeOfBuffer = hex(destVariable[CONST_BYTES])
+        
         if sizeOfSrcVariable > sizeOfBuffer:
             print "Exists Vulnerability: " + dangerousFunctions[index] 
             return True
     #gets
     if index == 6:
-       return False
-    
+        print "Exists Vulnerability: " + dangerousFunctions[index]
+        return True
+
     print "No Vulnerability at " + dangerousFunctions[index]
     return False
 
@@ -104,7 +113,7 @@ def checkOperationCall(instruction, nameFunction):
     return -1
         
 def checkFunction(function, nameFunction):
-    variables = function[CONST_VARIABLES]
+    variablesProgram.extend(function[CONST_VARIABLES])
     instructions = function[CONST_INSTRUCTIONS]
 
     for instruction in instructions:
@@ -114,12 +123,11 @@ def checkFunction(function, nameFunction):
         if operation == CONST_CALL_OPERATION:
             index = checkOperationCall(instruction, nameFunction)
             if index != -1:
-                inspectVulnerability(variables, instruction, nameFunction, index)
+                inspectVulnerability(instruction, nameFunction, index)
             continue
 
         if operation in assemblyInstructions[CONST_BASIC]:
             doRegisterOperation(instruction, nameFunction)
-    return
 
 
 #Main 
