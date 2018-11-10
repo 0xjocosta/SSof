@@ -19,6 +19,8 @@ CONST_ESI = "esi"
 CONST_ADDRESS = "address"
 CONST_BYTES = "bytes"
 
+CONST_MAIN = "main"
+
 #Dangerous functions
 dangerousFunctions = ["<fgets@plt>", "<strcpy@plt>", "<strcat@plt>", "<sprintf@plt>", "<fscanf@plt>", "<scanf@plt>", "<gets@plt>", "<strncpy@plt>", "<strncat@plt>", "<snprintf@plt>", "<read@plt>"]
 
@@ -87,7 +89,6 @@ def inspectVulnerability(instruction, nameFunction, index):
     print "No Vulnerability at " + dangerousFunctions[index]
     return False
 
-
 def doRegisterOperation(instruction, nameFunction):
     operation = instruction[CONST_OPERATION]
     dest = instruction[CONST_ARGS][CONST_DEST]
@@ -97,19 +98,29 @@ def doRegisterOperation(instruction, nameFunction):
         value = registersOfFunctions[nameFunction][value]
         
     if operation in registerOperations:
-        registersOfFunctions[nameFunction][dest] += registerOperations[operation] + value
+        if dest not in registersOfFunctions[nameFunction]:
+            registersOfFunctions[nameFunction][dest] = registerOperations[operation] + value
+        else:
+            registersOfFunctions[nameFunction][dest] += registerOperations[operation] + value
     else:
         registersOfFunctions[nameFunction][dest] = value
 
-    for register in registersOfFunctions[nameFunction]:
-        if dest == registersOfFunctions[nameFunction][register]:
-            registersOfFunctions[nameFunction][register] = registersOfFunctions[nameFunction][dest]
+    #for register in registersOfFunctions[nameFunction]:
+    #    if dest == registersOfFunctions[nameFunction][register]:
+    #        registersOfFunctions[nameFunction][register] = registersOfFunctions[nameFunction][dest]
+
+    printRegisters(nameFunction)
 
 def checkOperationCall(instruction, nameFunction):
     functionName = instruction[CONST_ARGS][CONST_FNNAME]
     if functionName in dangerousFunctions:
-        printRegisters(nameFunction)
-        return dangerousFunctions.index(functionName) 
+        return dangerousFunctions.index(functionName)
+    
+    for fName in jsonProgram:
+        if fName in functionName:
+            registersOfFunctions[fName] = registersOfFunctions[nameFunction]
+            checkFunction(jsonProgram[fName], fName)
+            return -1
     return -1
         
 def checkFunction(function, nameFunction):
@@ -129,7 +140,6 @@ def checkFunction(function, nameFunction):
         if operation in assemblyInstructions[CONST_BASIC]:
             doRegisterOperation(instruction, nameFunction)
 
-
 #Main 
 if(len(sys.argv) < 2):
     print "No program received!"
@@ -138,7 +148,6 @@ if(len(sys.argv) < 2):
 with open(str(sys.argv[1])) as json_data:
     jsonProgram = json.load(json_data)
 
-for function in jsonProgram:
-    registersOfFunctions[function] = registers
-    checkFunction(jsonProgram[function], function)
+registersOfFunctions[CONST_MAIN] = {}
+checkFunction(jsonProgram[CONST_MAIN], CONST_MAIN)
 
