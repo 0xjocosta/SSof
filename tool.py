@@ -24,7 +24,7 @@ CONST_NAME = "name"
 CONST_MAIN = "main"
 
 #Dangerous functions
-dangerousFunctions = ["<fgets@plt>", "<strcpy@plt>", "<strcat@plt>", "<sprintf@plt>", "<fscanf@plt>", "<scanf@plt>", "<gets@plt>", "<strncpy@plt>", "<strncat@plt>", "<snprintf@plt>", "<read@plt>"]
+dangerousFunctions = ({"<fgets@plt>": 1}, {"<strcpy@plt>" : 2}, {"<strcat@plt>": 2}, {"<sprintf@plt>": 0}, {"<fscanf@plt>": 0}, {"<scanf@plt>": 0}, {"<gets@plt>": 1}, {"<strncpy@plt>": 2}, {"<strncat@plt>": 2}, {"<snprintf@plt>": 0}, {"<read@plt>": 1})
 
 #Assembly instructions
 assemblyInstructions = {"basic": ["mov", "lea", "sub", "add"], "advanced": ["cmp", "test", "je", "jmp", "jne"]}
@@ -90,12 +90,11 @@ def getVariableMemory(varName):
 
 def checkOtherOverflow(sizeOfOverflow):
     print sizeOfOverflow
-    print "function: " + nameFunction
     print variablesProgram
     return 
 
 
-def inspectVulnerability(instruction, index):
+def inspectVulnerability(instruction, inputs):
     destAddress = registersOfFunctions[registersOrder[0]]
     destVariable = {}
     
@@ -107,6 +106,24 @@ def inspectVulnerability(instruction, index):
             nameVar = var
     
     sizeOfDest = hex(destVariable[CONST_BYTES])
+    
+    #fgets
+    if inputs == 1:
+        sizeOfInput = -1
+        if CONST_ESI in registersOfFunctions:
+            sizeOfInput = registersOfFunctions[CONST_ESI]
+
+        if sizeOfInput > sizeOfDest and sizeOfInput >= 0:
+            writeToAddress()
+            sizeOfOverflow = int(sizeOfInput, 0) - int(sizeOfDest, 0)
+            print "EXIST VUL..."
+            checkOtherOverflow(hex(sizeOfOverflow))
+            return True
+    #
+    elif inputs == 2:
+        
+    elif inputs == 3:
+        
     if registersOrder[1] in registersOfFunctions:
         srcAddress = registersOfFunctions[registersOrder[1]]
         if srcAddress != destAddress:
@@ -116,8 +133,7 @@ def inspectVulnerability(instruction, index):
                 variable = variablesProgram[var]
                 if variable[CONST_ADDRESS] in srcAddress:
                     srcVariable = variable
-                    break
-            
+                    break 
 
             if CONST_EDX in registersOfFunctions:
                 sizeOfSrc = registersOfFunctions[CONST_EDX]
@@ -173,8 +189,9 @@ def doRegisterOperation(instruction):
 
 def checkOperationCall(instruction):
     functionName = instruction[CONST_ARGS][CONST_FNNAME]
-    if functionName in dangerousFunctions:
-        return dangerousFunctions.index(functionName)
+    for func in dangerousFunctions:
+        if functionName in func.keys():
+            return func[functionName]
     
     for fName in jsonProgram:
         if fName in functionName:
@@ -231,5 +248,3 @@ with open(str(sys.argv[1])) as json_data:
     jsonProgram = json.load(json_data)
 
 checkFunction(jsonProgram[CONST_MAIN])
-getVariableMemory("control")
-getVariableMemory("buf")
