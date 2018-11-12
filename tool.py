@@ -19,6 +19,7 @@ CONST_ESI = "esi"
 CONST_EDX = "edx" 
 CONST_ADDRESS = "address"
 CONST_BYTES = "bytes"
+CONST_NAME = "name"
 
 CONST_MAIN = "main"
 
@@ -30,7 +31,7 @@ assemblyInstructions = {"basic": ["mov", "lea", "sub", "add"], "advanced": ["cmp
 registerOperations = {"sub": "-", "add": "+"}
 
 #Registers
-registers = {"rax": "", "rbx": "", "rcx": "", "rdx": "", "rdi": "", "rsi": "", "r8": "", "r9": "", "r10": "", "r11": "", "r12": "", "r13": "", "r14": "", "r15": "", "rbp": "", "rsp": "", "rip": ""}
+registers = ["rax", "rbx", "rcx", "rdx", "rdi", "rsi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "rbp", "rsp", "rip"]
 registersOfFunctions = {}
 registersOrder = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
 
@@ -40,10 +41,16 @@ jsonProgram = {}
 #Variables from JSON Program
 variablesProgram = {}
 
-#Actual Function
-global actualFunction
-actualFunction = CONST_MAIN
-global previousFunction
+#Memory
+memory = {}
+
+
+def printMemory():
+    print "---------Memory---------"
+    for addr in sorted (memory.keys()):
+        print addr + "-> " + memory[addr]
+
+    print "---------Memory---------"
 
 def printRegisters():
     print "-------------REGISTERS: -----------"
@@ -51,11 +58,40 @@ def printRegisters():
         print register + ": " + registersOfFunctions[register]
     print "-------------REGISTERS: -----------"
 
+def writeToAddress(address ,value):
+    memory[address] = value
 
-def checkOtherOverflow(sizeOfOverflow, nameFunction):
+def writeToMemory(addr, size, value):
+    count = int(addr[4:], 0)
+    addr = addr[0:4]
+    maxSize = count + size
+    
+    while(count != maxSize):
+        pos = addr + hex(count)
+        writeToAddress(pos, value)
+        count += 1
+    
+    addr = addr + hex(count)
+    writeToAddress(addr, "EOF")
+
+def getVariableMemory(varName):
+    address = variablesProgram[varName][CONST_ADDRESS]
+    variableMemory = {}
+    while True:
+        value = memory[address]
+        if value == "EOF":
+            variableMemory[address] = value
+            print variableMemory
+            return
+
+        variableMemory[address] = value
+        count = int(address[4:], 0) + 1
+        address = address[0:4] + hex(count)
+
+def checkOtherOverflow(sizeOfOverflow):
     print sizeOfOverflow
     print "function: " + nameFunction
-    print variablesProgram[nameFunction]
+    print variablesProgram
     return 
 
 
@@ -63,14 +99,12 @@ def inspectVulnerability(instruction, index):
     destAddress = registersOfFunctions[registersOrder[0]]
     destVariable = {}
     
-    idxDestVariable = 0
-    nFunction = ""
-    for function in variablesProgram:
-        for variable in variablesProgram[function]:
-            if variable[CONST_ADDRESS] in destAddress:
-                destVariable = variable
-                idxDestVariable = variablesProgram[function].index(variable)
-                nFunction = function
+    nameVar = ""
+    for var in variablesProgram:
+        variable = variablesProgram[var]
+        if variable[CONST_ADDRESS] in destAddress:
+            destVariable = variable
+            nameVar = var
     
     sizeOfDest = hex(destVariable[CONST_BYTES])
     if registersOrder[1] in registersOfFunctions:
@@ -78,11 +112,11 @@ def inspectVulnerability(instruction, index):
         if srcAddress != destAddress:
             srcVariable = {}
             
-            for function in variablesProgram:
-                for variable in variablesProgram[function]:
-                    if variable[CONST_ADDRESS] in srcAddress:
-                        srcVariable = variable
-                        break
+            for var in variablesProgram:
+                variable = variablesProgram[var]
+                if variable[CONST_ADDRESS] in srcAddress:
+                    srcVariable = variable
+                    break
             
 
             if CONST_EDX in registersOfFunctions:
@@ -93,7 +127,7 @@ def inspectVulnerability(instruction, index):
             if sizeOfSrc > sizeOfDest:
                 sizeOfOverflow = int(sizeOfSrc, 0) - int(sizeOfDest,0)
                 print "Exists Variable Overflow: " + instruction[CONST_ARGS][CONST_FNNAME]
-                checkOtherOverflow(hex(sizeOfOverflow), nFunction)
+                checkOtherOverflow(hex(sizeOfOverflow))
                 return True
             
     elif CONST_ESI in registersOfFunctions:
@@ -101,14 +135,14 @@ def inspectVulnerability(instruction, index):
         if sizeOfInput > sizeOfDest:
             sizeOfOverflow = int(sizeOfInput, 0) - int(sizeOfDest,0)
             print "Exists Variable Overflow: " + instruction[CONST_ARGS][CONST_FNNAME]
-            checkOtherOverflow(hex(sizeOfOverflow), nFunction)
+            checkOtherOverflow(hex(sizeOfOverflow))
             return True
         else:
-            variablesProgram[nFunction][idxDestVariable][CONST_BYTES] = int(sizeOfInput, 0)
+            variablesProgram[nameVar][CONST_BYTES] = int(sizeOfInput, 0)
     
     else:
         print "Exists Variable Overflow: " + instruction[CONST_ARGS][CONST_FNNAME]
-        checkOtherOverflow(999, nFunction)
+        checkOtherOverflow(999)
         return True
 
 
@@ -137,7 +171,7 @@ def doRegisterOperation(instruction):
 
     #printRegisters()
 
-def checkOperationCall(instruction, actualFunction):
+def checkOperationCall(instruction):
     functionName = instruction[CONST_ARGS][CONST_FNNAME]
     if functionName in dangerousFunctions:
         return dangerousFunctions.index(functionName)
@@ -148,22 +182,45 @@ def checkOperationCall(instruction, actualFunction):
             return -1
     return -1
         
-def checkFunction(function, actualFunction):
-    variablesProgram[actualFunction] = function[CONST_VARIABLES]
-    instructions = function[CONST_INSTRUCTIONS]
+def cleanRegisters():
+    for register in registersOfFunctions.keys():
+        if register not in registers:
+            del registersOfFunctions[register]
 
+def initializeMemory(function):
+    dic = {}
+    
+    for var in variablesProgram:
+        size = variablesProgram[var][CONST_BYTES]
+        address = variablesProgram[var][CONST_ADDRESS]
+        dic[address] = size
+    
+    value = "00"
+    for address in sorted (dic.keys()):
+        writeToMemory(address, dic[address], value)
+
+
+def checkFunction(function):
+    for var in function[CONST_VARIABLES]:
+        nameVar = var[CONST_NAME]
+        variablesProgram[nameVar] = var
+    initializeMemory(function)
+
+    instructions = function[CONST_INSTRUCTIONS]
     for instruction in instructions:
         operation = instruction[CONST_OPERATION]
         
         #verifying call function
         if operation == CONST_CALL_OPERATION:
-            index = checkOperationCall(instruction, actualFunction)
+            index = checkOperationCall(instruction)
             if index != -1:
                 inspectVulnerability(instruction, index)
             continue
 
         if operation in assemblyInstructions[CONST_BASIC]:
             doRegisterOperation(instruction)
+
+    cleanRegisters()
 
 #Main 
 if(len(sys.argv) < 2):
@@ -173,5 +230,6 @@ if(len(sys.argv) < 2):
 with open(str(sys.argv[1])) as json_data:
     jsonProgram = json.load(json_data)
 
-checkFunction(jsonProgram[CONST_MAIN], CONST_MAIN)
-
+checkFunction(jsonProgram[CONST_MAIN])
+getVariableMemory("control")
+getVariableMemory("buf")
