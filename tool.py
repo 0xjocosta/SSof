@@ -15,6 +15,9 @@ CONST_VALUE = "value"
 CONST_ADD = "add"
 CONST_SUB = "sub"
 
+CONST_PLUS = "+"
+CONST_MINUS = "-"
+
 CONST_ESI = "esi"
 CONST_EDX = "edx"
 CONST_ADDRESS = "address"
@@ -81,64 +84,114 @@ def printRegisters():
         print register + ": " + registersOfFunctions[register]
     print "-------------REGISTERS: -----------"
 
+def parseAddress(address):
+    if "[" in address:
+        return address[1:-1]
+    else:
+        return address
+
+def incrementAddress(address):
+    address = parseAddress(address)
+    count = int(address[3:], 0) + 1
+    if count > 0:
+        address = address[0:3] + CONST_PLUS + hex(count)
+    else:
+        address = address[0:3] + hex(count)
+    return address
+
+def decrementAddress(address):
+    address = parseAddress(address)
+
+    count = int(address[3:], 0) - 1
+    if count > 0:
+        address = address[0:3] + CONST_PLUS + hex(count)
+    else:
+        address = address[0:3] + hex(count)
+    return address
+
+def getCountOfAddress(address):
+    address = parseAddress(address)
+    return int(address[3:], 0)
+
 def writeToAddress(address ,value):
     memory[address] = value
 
 def writeToMemory(addr, size, value, withEOF):
-    print "first addr: " + addr,
+    addr = parseAddress(addr)
+    print "first addr: " + addr
     print "size: " + str(size)
-    count = int(addr[4:], 0)
-    addr = addr[0:4]
-    maxSize = count + size
+    count = getCountOfAddress(addr)
+    maxSize = count - size
 
     while(count != maxSize):
-        pos = addr + hex(count)
+        #pos = addr + hex(count)
         if value != CONST_TRASH and value != CONST_ZERO:
-            writeToAddress(pos, memory[value])
-            iteration = int(value[4:], 0) + 1
-            value = value[0:4] + hex(iteration)
+            value = parseAddress(value)
+            writeToAddress(addr, memory[value])
+            #iteration = int(value[4:], 0) - 1
+            #value = value[0:4] + hex(iteration)
+            value = incrementAddress(value)
         else:
-            writeToAddress(pos, value)
-        count += 1
+            writeToAddress(addr, value)
+
+        addr = incrementAddress(addr)
+        count -= 1
 
     if withEOF:
-        addr = addr + hex(count)
         writeToAddress(addr, "EOF")
     else:
-        pos = addr + hex(count)
-        writeToAddress(pos, value)
-        count += 1
+        if value != CONST_TRASH and value != CONST_ZERO:
+            writeToAddress(addr, memory[value])
+        else:
+            writeToAddress(addr, value)
 
 def copyToMemory(srcAddr, destAddr, size, withEOF):
     writeToMemory(destAddr, size, srcAddr, withEOF)
 
 def getSizeOfBuffer(address):
+    address = parseAddress(address)
     size = 0
     while True:
         value = memory[address]
         if value == "EOF":
             return size
 
-        count = int(address[4:], 0) + 1
-        address = address[0:4] + hex(count)
+        address = incrementAddress(address)
+        #count = int(address[4:], 0) - 1
+        #address = address[0:4] + hex(count)
         size += 1
 
 def getAddrEOF(varName):
     address = variablesProgram[varName][CONST_ADDRESS]
+    address = parseAddress(address)
     while True:
         value = memory[address]
         if value == "EOF":
             return address
 
-        count = int(address[4:], 0) + 1
-        address = address[0:4] + hex(count)
+        address = incrementAddress(address)
+        #count = int(address[4:], 0) - 1
+        #address = address[0:4] + hex(count)
 
 def checkOtherOverflow(sizeOfOverflow, varName):
     print "sizeOfOverflow: " + sizeOfOverflow
     addrEOF = getAddrEOF(varName)
     print "Address EOF: " + addrEOF
-    
-    return
+    value = int(addrEOF[4:],0)
+    if CONST_PLUS in addrEOF:
+        if value >= 16:
+            print "overflow everything SCORRUPTION"
+        elif value >= 8:
+            print "overflow vars, rbp, retAddr"
+        elif value >= 0:
+            print "overflow vars, rbp"
+
+    elif CONST_MINUS in addrEOF:
+        return
+
+    else:
+        print "nothing else"
+        return
 
 
 #def functionNameConverter(fnName)
@@ -178,7 +231,7 @@ def inspectVulnerability(instruction, inputs, fnName):
         if sizeOfInputInt != -1:
             #fgets
             if sizeOfInputInt > sizeOfDestInt and sizeOfInputInt >= 0:
-                writeToMemory(destAddress[1:-1], sizeOfInputInt, CONST_TRASH, True)
+                writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, True)
                 sizeOfOverflow = sizeOfInputInt - sizeOfDestInt
                 print "Exists Variable Overflow: " + callFnName
                 #output = outputOverFlow(instruction, nameVar, fnName,overflowType=)
@@ -186,7 +239,7 @@ def inspectVulnerability(instruction, inputs, fnName):
                 return True
 
             else:
-                writeToMemory(destAddress[1:-1], sizeOfInputInt, CONST_TRASH, True)
+                writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, True)
                 variablesProgram[nameVar][CONST_BYTES] = sizeOfInputInt
                 print "No Vulnerability at " + callFnName
                 return False
@@ -194,8 +247,8 @@ def inspectVulnerability(instruction, inputs, fnName):
         if sizeOfInputInt == -1:
             #gets
             print "Exists Variable Overflow: " + callFnName
+            #writeToMemory(destAddress[1:-1], sizeOfInputInt, CONST_TRASH, True)
             #checkOtherOverflow(hex(sizeOfOverflow), nameVar)
-            #writeToMemory()
             return True
 
         print "No Vulnerability at " + callFnName
@@ -226,7 +279,7 @@ def inspectVulnerability(instruction, inputs, fnName):
                 withEOF = False
         else:
             #strcat, strcpy
-            sizeOfSrcInt = getSizeOfBuffer(srcAddress[1:-1])
+            sizeOfSrcInt = getSizeOfBuffer(srcAddress)
             sizeOfSrc = hex(sizeOfSrcInt)
             withEOF = True
 
@@ -235,12 +288,12 @@ def inspectVulnerability(instruction, inputs, fnName):
         if sizeOfSrcInt > sizeOfDestInt:
             sizeOfOverflow = sizeOfSrcInt - sizeOfDestInt
             print "Exists Variable Overflow: " + callFnName
-            copyToMemory(srcAddress[1:-1], destAddress[1:-1], sizeOfSrcInt, withEOF)
+            copyToMemory(srcAddress, destAddress, sizeOfSrcInt, withEOF)
             checkOtherOverflow(hex(sizeOfOverflow), nameVar)
             return True
 
         print "No Vulnerability at " + callFnName
-        copyToMemory(srcAddress[1:-1], destAddress[1:-1], sizeOfSrcInt, withEOF)
+        copyToMemory(srcAddress, destAddress, sizeOfSrcInt, withEOF)
         return False
 
     elif inputs == 3:
