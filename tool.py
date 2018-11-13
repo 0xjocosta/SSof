@@ -34,11 +34,17 @@ CONST_LIMIT_ADDR = "rbp+0x10"
 #Vulnerability outputs
 CONST_VULN = "vulnerability"
 CONST_VULNFN = "vuln_function"
-CONST_OVERFLWVAR = "overflow_var"
+CONST_OFVAR = "overflow_var"
+CONST_OFNVAR = "overflown_var"
 
 CONST_VAROFLW = "VAROVERFLOW"
 CONST_RBPOFLW = "RBPOVERFLOW"
 CONST_RETOFLW = "RETOVERFLOW"
+CONST_INVALIDACC = "INVALIDACCS"
+CONST_SCORRUPTION = "SCORRUPTION"
+
+#Vulnerabilities tuple
+vulnList=(CONST_RBPOFLW,  CONST_RETOFLW, CONST_SCORRUPTION)
 
 #Dangerous functions
 dangerousFunctions = ({"<fgets@plt>": 1}, {"<strcpy@plt>" : 2}, {"<strcat@plt>": 2}, {"<sprintf@plt>": 0}, {"<fscanf@plt>": 0}, {"<scanf@plt>": 0}, {"<gets@plt>": 1}, {"<strncpy@plt>": 2}, {"<strncat@plt>": 2}, {"<snprintf@plt>": 0}, {"<read@plt>": 1})
@@ -175,37 +181,70 @@ def getAddrEOF(varName):
 
         address = incrementAddress(address)
 
-def checkOtherOverflow(varName):
-    addrEOF = getAddrEOF(varName)
+def overflownVariables(addrEOF):
+    overflwnVariables = []
+
+    addrEOF = parseAddress(addrEOF)
+    for variable in variablesProgram:
+        addrVariable = variable[CONST_ADDRESS]
+        addrVariable = parseAddress(addrVariable)
+        if not addrEOF > addrVariable:
+            overflwnVariables.append(variable[CONST_NAME])
+
+    return overflwnVariables
+
+def outputOverFlow(instruction, nameVar, fnName, overflowType, instructionFn):
+    output = {}
+    #if advanced:
+    #    xisdeh
+    #else:
+    output[CONST_VULN] = overflowType
+    output[CONST_VULNFN] = fnName
+    output[CONST_ADDRESS] = instruction[CONST_ARGS][CONST_ADDRESS]
+    output[CONST_FNNAME] = instructionFn
+    output[CONST_OFVAR] = nameVar #funcao de buffers recursivos
+    return output
+
+def outputOverflown(instruction, nameVar, fnName, fnName, addrEOF):
+    array = []
+    overflownVariables = overflownVariables(addrEOF)
+    for var in overflownVariables:
+        array.append(outputOverFlow(instruction, nameVar, fnName, CONST_VAROFLW, fnName))
+    return array
+
+def checkOverflowType(instruction, nameVar, vulnFnName, fnName):
+    arrayVul = []
+
+    addrEOF = getAddrEOF(nameVar)
     print "Address EOF: " + addrEOF
     value = int(addrEOF[4:],0)
+
     if CONST_PLUS in addrEOF:
         if value >= 16:
-            print "overflow everything SCORRUPTION"
+            print "overflow vars, rbp, retAddr, SCORRUPTION"
+            arrayVul.extend(outputOverflown(instruction, nameVar, fnName, fnName, addrEOF))
+            for i in range(len(vulnList)):
+                arrayVul.append(outputOverFlow(instruction, nameVar, fnName, vulnList[i], fnName))
+
         elif value >= 8:
             print "overflow vars, rbp, retAddr"
+            arrayVul.extend(outputOverflown(instruction, nameVar, fnName, fnName, addrEOF))
+            for i in range(len(vulnList)-1):
+                arrayVul.append(outputOverFlow(instruction, nameVar, fnName, vulnList[i], fnName))
+
         elif value >= 0:
             print "overflow vars, rbp"
+            arrayVul.extend(outputOverflown(instruction, nameVar, fnName, fnName, addrEOF))
+            for i in range(len(vulnList)-2):
+                arrayVul.append(outputOverFlow(instruction, nameVar, fnName, vulnList[i], fnName))
 
     elif CONST_MINUS in addrEOF:
-        return
+        print "overflow vars"
+        arrayVul.extend(outputOverflown(instruction, nameVar, fnName, fnName, addrEOF))
 
     else:
         print "nothing else"
         return
-
-
-#def functionNameConverter(fnName)
-
-def outputOverFlow(instruction, nameVar, fnName, overflowType):
-    output[CONST_VULN] = overflowType
-    output[CONST_VULNFN] = fnName
-    output[CONST_ADDRESS] = instruction[CONST_ARGS][CONST_ADDRESS]
-    output[CONST_FNNAME] = instruction[CONST_ARGS][CONST_FNNAME]
-    output[CONST_OVERFLWVAR] = nameVar
-    return output
-
-#def overflowType()
 
 def inspectVulnerability(instruction, inputs, fnName):
     callFnName = instruction[CONST_ARGS][CONST_FNNAME]
@@ -222,6 +261,112 @@ def inspectVulnerability(instruction, inputs, fnName):
 
     sizeOfDest = hex(destVariable[CONST_BYTES])
     sizeOfDestInt = int(sizeOfDest, 0)
+
+    if CONST_READ in callFnName:
+        return
+
+    if CONST_FGETS in callFnName:
+
+        sizeOfInputInt = int(registersOfFunctions[CONST_ESI],0)
+        if sizeOfInputInt > sizeOfDestInt:
+            writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, True)
+            print "Exists Variable Overflow: " + callFnName
+            checkOverflowType(instruction, nameVar, fnName, CONST_FGETS)
+            return True
+
+        else:
+            writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, True)
+            variablesProgram[nameVar][CONST_BYTES] = sizeOfInputInt
+            print "No Vulnerability at " + callFnName
+            return False
+
+    if CONST_GETS in callFnName:
+
+        print "Exists Variable Overflow: " + callFnName
+        count = getCountOfAddress(destAddress)
+        sizeOfInputInt = 10 - count
+        writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, False)
+        checkOverflowType(instruction, nameVar, fnName, CONST_GETS)
+        return True
+
+    srcAddress = registersOfFunctions[registersOrder[1]]
+    srcVariable = {}
+    for var in variablesProgram:
+        variable = variablesProgram[var]
+        if variable[CONST_ADDRESS] in srcAddress:
+            srcVariable = variable
+            break
+
+    if CONST_STRNCAT in callFnName:
+        sizeOfSrcInt = int(registersOfFunctions[CONST_EDX], 0) + 1 #'\0'
+        sizeOfSrc = hex(sizeOfSrcInt)
+        withEOF = True
+
+        sizeOfStr = getSizeOfBuffer(destAddr)
+        destAddr = getAddrEOF(nameVar)
+        if sizeOfSrcInt + sizeOfStr > sizeOfDestInt:
+            print "Exists Variable Overflow: " + callFnName
+            copyToMemory(srcAddress, destAddr, sizeOfSrcInt, withEOF)
+            checkOverflowType(instruction, nameVar, fnName, CONST_STRNCAT)
+            return True
+
+        print "No Vulnerability at " + callFnName
+        copyToMemory(srcAddress, destAddr, sizeOfSrcInt, withEOF)
+        return False
+
+    if CONST_STRCAT in callFnName:
+        sizeOfSrcInt = getSizeOfBuffer(srcAddress)
+        sizeOfSrc = hex(sizeOfSrcInt)
+        withEOF = True
+
+        sizeOfStr = getSizeOfBuffer(destAddr)
+        destAddr = getAddrEOF(nameVar)
+        if sizeOfSrcInt + sizeOfStr > sizeOfDestInt:
+            print "Exists Variable Overflow: " + callFnName
+            copyToMemory(srcAddress, destAddr, sizeOfSrcInt, withEOF)
+            checkOverflowType(instruction, nameVar, fnName, CONST_STRCAT)
+            return True
+
+        print "No Vulnerability at " + callFnName
+        copyToMemory(srcAddress, destAddr, sizeOfSrcInt, withEOF)
+        return False
+
+    if CONST_STRNCPY in callFnName:
+        sizeOfSrc = registersOfFunctions[CONST_EDX]
+        sizeOfSrcInt = int(registersOfFunctions[CONST_EDX], 0)
+        withEOF = False
+
+        if sizeOfSrcInt > sizeOfDestInt:
+            print "Exists Variable Overflow: " + callFnName
+            copyToMemory(srcAddress, destAddress, sizeOfSrcInt, withEOF)
+            checkOverflowType(instruction, nameVar, fnName, CONST_STRNCPY)
+            return True
+
+        print "No Vulnerability at " + callFnName
+        copyToMemory(srcAddress, destAddress, sizeOfSrcInt, withEOF)
+        return False
+
+    if CONST_STRCPY in callFnName:
+        sizeOfSrcInt = getSizeOfBuffer(srcAddress)
+        sizeOfSrc = hex(sizeOfSrcInt)
+        withEOF = True
+
+        if sizeOfSrcInt > sizeOfDestInt:
+            print "Exists Variable Overflow: " + callFnName
+            copyToMemory(srcAddress, destAddress, sizeOfSrcInt, withEOF)
+            checkOverflowType(instruction, nameVar, fnName, CONST_STRNCPY)
+            return True
+
+        print "No Vulnerability at " + callFnName
+        copyToMemory(srcAddress, destAddress, sizeOfSrcInt, withEOF)
+        return False
+
+    if CONST_FSCANF in callFnName:
+        return
+
+    if CONST_FSCANF in callFnName:
+        return
+
     #fgets, gets
     if inputs == 1:
         if CONST_ESI in registersOfFunctions:
@@ -235,7 +380,7 @@ def inspectVulnerability(instruction, inputs, fnName):
                 writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, True)
                 print "Exists Variable Overflow: " + callFnName
                 #output = outputOverFlow(instruction, nameVar, fnName,overflowType=)
-                checkOtherOverflow(nameVar)
+                checkOverflowType(instruction, nameVar, fnName)
                 return True
 
             else:
@@ -250,7 +395,7 @@ def inspectVulnerability(instruction, inputs, fnName):
             count = getCountOfAddress(destAddress)
             sizeOfInputInt = 10 - count
             writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, False)
-            checkOtherOverflow(nameVar)
+            checkOverflowType(instruction, nameVar, fnName)
             return True
 
         print "No Vulnerability at " + callFnName
@@ -279,7 +424,7 @@ def inspectVulnerability(instruction, inputs, fnName):
                 sizeOfSrc = registersOfFunctions[CONST_EDX]
                 sizeOfSrcInt = int(registersOfFunctions[CONST_EDX], 0)
                 withEOF = False
-        else:
+
             #strcat, strcpy
             sizeOfSrcInt = getSizeOfBuffer(srcAddress)
             sizeOfSrc = hex(sizeOfSrcInt)
@@ -291,7 +436,7 @@ def inspectVulnerability(instruction, inputs, fnName):
             sizeOfOverflow = sizeOfSrcInt - sizeOfDestInt
             print "Exists Variable Overflow: " + callFnName
             copyToMemory(srcAddress, destAddress, sizeOfSrcInt, withEOF)
-            checkOtherOverflow(nameVar)
+            checkOverflowType(instruction, nameVar, fnName)
             return True
 
         print "No Vulnerability at " + callFnName
