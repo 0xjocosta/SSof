@@ -31,6 +31,8 @@ CONST_MAIN = "main"
 CONST_TRASH = "TRASH"
 CONST_ZERO = "00"
 CONST_LIMIT_ADDR = "rbp+0x10"
+CONST_EMPTY = ""
+CONST_RBP = "rbp+0x00"
 
 #Vulnerability outputs
 CONST_VULN = "vulnerability"
@@ -182,34 +184,39 @@ def getAddrEOF(varName):
 
         address = incrementAddress(address)
 
-def overflownVariables(addrEOF):
+def overflownVariables(addrEOF, nameVar):
     overflwnVariables = []
 
+    overflowerAddr = parseAddress(variablesProgram[nameVar][CONST_ADDRESS])
+
     addrEOF = parseAddress(addrEOF)
-    for variable in variablesProgram:
-        addrVariable = variable[CONST_ADDRESS]
+    for var in variablesProgram:
+        addrVariable = variablesProgram[var][CONST_ADDRESS]
         addrVariable = parseAddress(addrVariable)
-        if not addrEOF > addrVariable:
-            overflwnVariables.append(variable[CONST_NAME])
+        print "eof:" + addrEOF
+        print "var: " + addrVariable
+        print "over:" + overflowerAddr
+        if not addrEOF > addrVariable > overflowerAddr and addrVariable != overflowerAddr:
+            overflwnVariables.append(var)
 
     return overflwnVariables
 
-def outputOverflow(instruction, nameVar, vulnFnName, overflowType, fnName, overFlownVar=CONST_EMPTY):
+def outputOverflow(instruction, nameVar, vulnFnName, overflowType, fnName, overFlownVar = CONST_EMPTY):
     output = {}
     if overflowType == CONST_VAROFLW:
         output[CONST_OFNVAR] = overFlownVar
     output[CONST_VULN] = overflowType
-    output[CONST_VULNFN] = fnName
+    output[CONST_VULNFN] = vulnFnName
     output[CONST_ADDRESS] = instruction[CONST_ARGS][CONST_ADDRESS]
-    output[CONST_FNNAME] = instructionFn
+    output[CONST_FNNAME] = fnName
     output[CONST_OFVAR] = nameVar #funcao de buffers recursivos
-
+    print output
     return output
 
 def outputOverflown(instruction, nameVar, vulnFnName, fnName , addrEOF):
     array = []
-    overflownVariables = overflownVariables(addrEOF)
-    for var in overflownVariables:
+    overflwnVariables = overflownVariables(addrEOF, nameVar)
+    for var in overflwnVariables:
         array.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_VAROFLW, fnName, var))
     return array
 
@@ -247,7 +254,7 @@ def checkOverflowType(instruction, nameVar, vulnFnName, fnName):
         print "nothing else"
         return
 
-def inspectVulnerability(instruction, inputs, fnName):
+def inspectVulnerability(instruction, inputs, vulnFnName):
     callFnName = instruction[CONST_ARGS][CONST_FNNAME]
 
     destAddress = registersOfFunctions[registersOrder[0]]
@@ -411,85 +418,6 @@ def inspectVulnerability(instruction, inputs, fnName):
     if CONST_FSCANF in callFnName:
         return
 
-    #fgets, gets
-    if inputs == 1:
-        if CONST_ESI in registersOfFunctions:
-            sizeOfInputInt = int(registersOfFunctions[CONST_ESI],0)
-        else:
-            sizeOfInputInt = -1
-
-        if sizeOfInputInt != -1:
-            #fgets
-            if sizeOfInputInt > sizeOfDestInt and sizeOfInputInt >= 0:
-                writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, True)
-                print "Exists Variable Overflow: " + callFnName
-                #output = outputOverflow(instruction, nameVar, fnName,overflowType=)
-                checkOverflowType(instruction, nameVar, fnName)
-                return True
-
-            else:
-                writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, True)
-                variablesProgram[nameVar][CONST_BYTES] = sizeOfInputInt
-                print "No Vulnerability at " + callFnName
-                return False
-
-        if sizeOfInputInt == -1:
-            #gets
-            print "Exists Variable Overflow: " + callFnName
-            count = getCountOfAddress(destAddress)
-            sizeOfInputInt = 10 - count
-            writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, False)
-            checkOverflowType(instruction, nameVar, fnName)
-            return True
-
-        print "No Vulnerability at " + callFnName
-        return False
-
-    #strcpy, strncpy, strcat, strncat
-    elif inputs == 2:
-        srcAddress = registersOfFunctions[registersOrder[1]]
-        srcVariable = {}
-        withEOF = True
-
-        for var in variablesProgram:
-            variable = variablesProgram[var]
-            if variable[CONST_ADDRESS] in srcAddress:
-                srcVariable = variable
-                break
-
-        if CONST_EDX in registersOfFunctions:
-            #strncat, strncpy
-            if CONST_STRNCAT in callFnName:
-                sizeOfSrcInt = int(registersOfFunctions[CONST_EDX], 0) + 1 #'\0'
-                sizeOfSrc = hex(sizeOfSrcInt)
-                withEOF = True
-
-            if CONST_STRNCPY in callFnName:
-                sizeOfSrc = registersOfFunctions[CONST_EDX]
-                sizeOfSrcInt = int(registersOfFunctions[CONST_EDX], 0)
-                withEOF = False
-
-            #strcat, strcpy
-            sizeOfSrcInt = getSizeOfBuffer(srcAddress)
-            sizeOfSrc = hex(sizeOfSrcInt)
-            withEOF = True
-
-        print "sizeOfSrc: " + sizeOfSrc
-        print "sizeOfDest: " + sizeOfDest
-        if sizeOfSrcInt > sizeOfDestInt:
-            sizeOfOverflow = sizeOfSrcInt - sizeOfDestInt
-            print "Exists Variable Overflow: " + callFnName
-            copyToMemory(srcAddress, destAddress, sizeOfSrcInt, withEOF)
-            checkOverflowType(instruction, nameVar, fnName)
-            return True
-
-        print "No Vulnerability at " + callFnName
-        copyToMemory(srcAddress, destAddress, sizeOfSrcInt, withEOF)
-        return False
-
-    elif inputs == 3:
-        return
-
     print "No Vulnerability at " + callFnName
     return False
 
@@ -534,12 +462,10 @@ def initializeMemory(function):
         address = variable[CONST_ADDRESS]
         dic[address] = size
 
-    index = 1
+    writeToMemory(CONST_RBP, 16, CONST_ZERO, False)
+
     for address in sorted (dic.keys()):
-        lastAddress = writeToMemory(address, dic[address], CONST_ZERO, False)
-        if index == 1:
-            writeToMemory(lastAddress, 16, CONST_ZERO, False)
-        index += 1
+        writeToMemory(address, dic[address], CONST_ZERO, False)
 
 def checkFunction(function, fnName):
     for var in function[CONST_VARIABLES]:
