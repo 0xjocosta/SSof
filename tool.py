@@ -29,6 +29,7 @@ CONST_MAIN = "main"
 #Others
 CONST_TRASH = "TRASH"
 CONST_ZERO = "00"
+CONST_LIMIT_ADDR = "rbp+0x10"
 
 #Vulnerability outputs
 CONST_VULN = "vulnerability"
@@ -124,12 +125,9 @@ def writeToMemory(addr, size, value, withEOF):
     maxSize = count - size
 
     while(count != maxSize):
-        #pos = addr + hex(count)
         if value != CONST_TRASH and value != CONST_ZERO:
             value = parseAddress(value)
             writeToAddress(addr, memory[value])
-            #iteration = int(value[4:], 0) - 1
-            #value = value[0:4] + hex(iteration)
             value = incrementAddress(value)
         else:
             writeToAddress(addr, value)
@@ -137,13 +135,19 @@ def writeToMemory(addr, size, value, withEOF):
         addr = incrementAddress(addr)
         count -= 1
 
+        if addr == CONST_LIMIT_ADDR:
+            return addr
+
     if withEOF:
         writeToAddress(addr, "EOF")
+        return addr
     else:
         if value != CONST_TRASH and value != CONST_ZERO:
             writeToAddress(addr, memory[value])
+            return addr
         else:
             writeToAddress(addr, value)
+            return addr
 
 def copyToMemory(srcAddr, destAddr, size, withEOF):
     writeToMemory(destAddr, size, srcAddr, withEOF)
@@ -157,24 +161,21 @@ def getSizeOfBuffer(address):
             return size
 
         address = incrementAddress(address)
-        #count = int(address[4:], 0) - 1
-        #address = address[0:4] + hex(count)
         size += 1
 
 def getAddrEOF(varName):
     address = variablesProgram[varName][CONST_ADDRESS]
     address = parseAddress(address)
     while True:
+        if address == CONST_LIMIT_ADDR:
+            return address
         value = memory[address]
         if value == "EOF":
             return address
 
         address = incrementAddress(address)
-        #count = int(address[4:], 0) - 1
-        #address = address[0:4] + hex(count)
 
-def checkOtherOverflow(sizeOfOverflow, varName):
-    print "sizeOfOverflow: " + sizeOfOverflow
+def checkOtherOverflow(varName):
     addrEOF = getAddrEOF(varName)
     print "Address EOF: " + addrEOF
     value = int(addrEOF[4:],0)
@@ -232,10 +233,9 @@ def inspectVulnerability(instruction, inputs, fnName):
             #fgets
             if sizeOfInputInt > sizeOfDestInt and sizeOfInputInt >= 0:
                 writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, True)
-                sizeOfOverflow = sizeOfInputInt - sizeOfDestInt
                 print "Exists Variable Overflow: " + callFnName
                 #output = outputOverFlow(instruction, nameVar, fnName,overflowType=)
-                checkOtherOverflow(hex(sizeOfOverflow), nameVar)
+                checkOtherOverflow(nameVar)
                 return True
 
             else:
@@ -247,8 +247,10 @@ def inspectVulnerability(instruction, inputs, fnName):
         if sizeOfInputInt == -1:
             #gets
             print "Exists Variable Overflow: " + callFnName
-            #writeToMemory(destAddress[1:-1], sizeOfInputInt, CONST_TRASH, True)
-            #checkOtherOverflow(hex(sizeOfOverflow), nameVar)
+            count = getCountOfAddress(destAddress)
+            sizeOfInputInt = 10 - count
+            writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, False)
+            checkOtherOverflow(nameVar)
             return True
 
         print "No Vulnerability at " + callFnName
@@ -289,7 +291,7 @@ def inspectVulnerability(instruction, inputs, fnName):
             sizeOfOverflow = sizeOfSrcInt - sizeOfDestInt
             print "Exists Variable Overflow: " + callFnName
             copyToMemory(srcAddress, destAddress, sizeOfSrcInt, withEOF)
-            checkOtherOverflow(hex(sizeOfOverflow), nameVar)
+            checkOtherOverflow(nameVar)
             return True
 
         print "No Vulnerability at " + callFnName
@@ -318,12 +320,6 @@ def doRegisterOperation(instruction):
     else:
         registersOfFunctions[dest] = value
 
-    #for register in registersOfFunctions[nameFunction]:
-    #    if dest == registersOfFunctions[nameFunction][register]:
-    #        registersOfFunctions[nameFunction][register] = registersOfFunctions[nameFunction][dest]
-
-    #printRegisters()
-
 def checkOperationCall(instruction):
     functionName = instruction[CONST_ARGS][CONST_FNNAME]
     for func in dangerousFunctions:
@@ -349,9 +345,12 @@ def initializeMemory(function):
         address = variable[CONST_ADDRESS]
         dic[address] = size
 
+    index = 1
     for address in sorted (dic.keys()):
-        writeToMemory(address, dic[address], CONST_ZERO, False)
-
+        lastAddress = writeToMemory(address, dic[address], CONST_ZERO, False)
+        if index == 1:
+            writeToMemory(lastAddress, 16, CONST_ZERO, False)
+        index += 1
 
 def checkFunction(function, fnName):
     for var in function[CONST_VARIABLES]:
