@@ -180,6 +180,11 @@ def writeToMemory(addr, size, value, withEOF):
 
     #invalid address
     if addr not in memory and value != CONST_ZERO:
+        if value == CONST_TRASH:
+            return addr
+        if value == CONST_EOF:
+            writeToAddress(addr, CONST_EOF)
+            return addr
         return addr
 
     if withEOF:
