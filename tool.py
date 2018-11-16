@@ -145,9 +145,6 @@ def writeToAddress(address ,value):
     memory[address] = value
 
 def writeToMemory(addr, size, value, withEOF):
-    #addr
-    invalidAddrs = []
-
     addr = parseAddress(addr)
     print "first addr: " + addr
     print "size: " + str(size)
@@ -155,7 +152,6 @@ def writeToMemory(addr, size, value, withEOF):
     maxSize = count + size - 1
     while(count != maxSize):
         if addr not in memory and value != CONST_ZERO:
-            invalidAddrs.append(addr)
             addr = incrementAddress(addr)
             count += 1
             continue
@@ -171,21 +167,18 @@ def writeToMemory(addr, size, value, withEOF):
         count += 1
 
         if addr == CONST_LIMIT_ADDR:
-            return addr, invalidAddrs
+            return addr
 
     if withEOF:
         writeToAddress(addr, "EOF")
-        return addr, invalidAddrs
+        return addr
     else:
         if value != CONST_TRASH and value != CONST_ZERO:
             writeToAddress(addr, memory[value])
-            return addr, invalidAddrs
+            return addr
         else:
             writeToAddress(addr, value)
-            return addr, invalidAddrs
-
-def copyToMemory(srcAddr, destAddr, size, withEOF):
-    return writeToMemory(destAddr, size, srcAddr, withEOF)
+            return addr
 
 def getSizeOfBuffer(address):
     address = parseAddress(address)
@@ -235,7 +228,7 @@ def getNameAndVariable(addr):
     return nameVar, destVariable
 
 def overflownVariables(addrEOF, nameVar):
-    overflwnVariables = []
+    overflwnVariables = {}
 
     overflowerAddr = parseAddress(variablesProgram[nameVar][CONST_ADDRESS])
     intOverflowerAddr = getCountOfAddress(overflowerAddr)
@@ -245,12 +238,9 @@ def overflownVariables(addrEOF, nameVar):
     for var in variablesProgram:
         addrVariable = variablesProgram[var][CONST_ADDRESS]
         addrVariable = parseAddress(addrVariable)
-        print "eof:" + addrEOF
-        print "var: " + addrVariable
-        print "over:" + overflowerAddr
         intAddrVariable = getCountOfAddress(addrVariable)
         if intEOF >= intAddrVariable > intOverflowerAddr and addrVariable != overflowerAddr:
-            overflwnVariables.append(var)
+            overflwnVariables[addrVariable] = var
 
     return overflwnVariables
 
@@ -272,12 +262,25 @@ def outputOverflow(instruction, nameVar, vulnFnName, overflowType, fnName, overF
     output[CONST_OFVAR] = nameVar #funcao de buffers recursivos
     return output
 
-def outputOverflown(instruction, nameVar, vulnFnName, fnName , addrEOF):
-    array = []
-    overflwnVariables = overflownVariables(addrEOF, nameVar)
-    for var in overflwnVariables:
-        array.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_VAROFLW, fnName, var))
-    return array
+def overflowAddrDetector(instruction, lastAddress, nameVar, vulnFnName, fnName):
+    overflowerAddr = parseAddress(variablesProgram[nameVar][CONST_ADDRESS])
+    lastAddress = parseAddress(lastAddress)
+    lastAddress = incrementAddress(lastAddress)
+
+    overflwnVariables = overflownVariables(lastAddress, nameVar)
+
+    alreadyInvalid = False
+    while overflowerAddr != lastAddress:
+        print overflowerAddr
+        if overflowerAddr not in memory and not alreadyInvalid and overflowerAddr != CONST_LIMIT_ADDR:
+            outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_INVALIDACC, fnName, overflowerAddr))
+            alreadyInvalid = True
+
+        if overflowerAddr in overflwnVariables:
+            outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_VAROFLW, fnName, overflwnVariables[overflowerAddr]))
+
+        overflowerAddr = incrementAddress(overflowerAddr)
+
 
 def checkOverflowType(instruction, nameVar, vulnFnName, fnName, lastAddress):
     lastAddress = parseAddress(lastAddress)
@@ -288,25 +291,25 @@ def checkOverflowType(instruction, nameVar, vulnFnName, fnName, lastAddress):
     if CONST_PLUS in lastAddress:
         if value >= 16:
             print "overflow vars, rbp, retAddr, SCORRUPTION"
-            outputJSON.extend(outputOverflown(instruction, nameVar, vulnFnName, fnName, lastAddress))
+            overflowAddrDetector(instruction, lastAddress, nameVar, vulnFnName, fnName)
             for i in range(len(vulnList)):
                 outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, vulnList[i], fnName))
 
         elif value >= 8:
             print "overflow vars, rbp, retAddr"
-            outputJSON.extend(outputOverflown(instruction, nameVar, vulnFnName, fnName, lastAddress))
+            overflowAddrDetector(instruction, lastAddress, nameVar, vulnFnName, fnName)
             for i in range(len(vulnList)-1):
                 outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, vulnList[i], fnName))
 
         elif value >= 0:
             print "overflow vars, rbp"
-            outputJSON.extend(outputOverflown(instruction, nameVar, vulnFnName, fnName, lastAddress))
+            overflowAddrDetector(instruction, lastAddress, nameVar, vulnFnName, fnName)
             for i in range(len(vulnList)-2):
                 outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, vulnList[i], fnName))
 
     elif CONST_MINUS in lastAddress:
         print "overflow vars"
-        outputJSON.extend(outputOverflown(instruction, nameVar, vulnFnName, fnName, lastAddress))
+        overflowAddrDetector(instruction, lastAddress, nameVar, vulnFnName, fnName)
 
     else:
         print "nothing else"
@@ -429,21 +432,17 @@ def inspectVulnerability(instruction, vulnFnName):
 
 def inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction):
     lastAddress = None
-    invalidAddrs = []
 
     if dangerousFunction.srcAddress is None:
-        lastAddress, invalidAddrs = writeToMemory(dangerousFunction.destAddress, dangerousFunction.sizeOfSrcInt, CONST_TRASH, dangerousFunction.withEOF)
+        lastAddress = writeToMemory(dangerousFunction.destAddress, dangerousFunction.sizeOfSrcInt, CONST_TRASH, dangerousFunction.withEOF)
     else:
         if dangerousFunction.endOfStringAddr is None:
-            lastAddress, invalidAddrs = writeToMemory(dangerousFunction.destAddress, dangerousFunction.sizeOfSrcInt, dangerousFunction.srcAddress, dangerousFunction.withEOF)
+            lastAddress = writeToMemory(dangerousFunction.destAddress, dangerousFunction.sizeOfSrcInt, dangerousFunction.srcAddress, dangerousFunction.withEOF)
         else:
-            lastAddress, invalidAddrs = writeToMemory(dangerousFunction.endOfStringAddr, dangerousFunction.sizeOfSrcInt, dangerousFunction.srcAddress, dangerousFunction.withEOF)
+            lastAddress = writeToMemory(dangerousFunction.endOfStringAddr, dangerousFunction.sizeOfSrcInt, dangerousFunction.srcAddress, dangerousFunction.withEOF)
 
     if dangerousFunction.sizeOfSrcInt + dangerousFunction.sizeOfStrInt > dangerousFunction.sizeOfDestInt:
         print "Exists Variable Overflow: " + vulnFnName
-        if len(invalidAddrs) > 0:
-            outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_INVALIDACC, dangerousFunction.fnName, invalidAddrs[0]))
-
         checkOverflowType(instruction, nameVar, vulnFnName, dangerousFunction.fnName, lastAddress)
         return True
 
