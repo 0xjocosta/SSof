@@ -52,15 +52,15 @@ CONST_SCORRUPTION = "SCORRUPTION"
 vulnList = (CONST_RBPOFLW,  CONST_RETOFLW, CONST_SCORRUPTION)
 
 #Dangerous functions
-dangerousFunctions = ("<fgets@plt>", "<strcpy@plt>", "<strcat@plt>", "<sprintf@plt>", "<fscanf@plt>", "<scanf@plt>", "<gets@plt>", "<strncpy@plt>", "<strncat@plt>", "<snprintf@plt>", "<read@plt>")
+dangerousFunctions = ("<fgets@plt>", "<strcpy@plt>", "<strcat@plt>", "<sprintf@plt>", "<__isoc99_fscanf@plt>", "<__isoc99_scanf@plt>", "<gets@plt>", "<strncpy@plt>", "<strncat@plt>", "<snprintf@plt>", "<read@plt>")
 CONST_GETS = "gets"
 CONST_FGETS = "fgets"
 CONST_STRCPY = "strcpy"
 CONST_STRNCPY = "strncpy"
 CONST_STRCAT = "strcat"
 CONST_STRNCAT = "strncat"
-CONST_FSCANF = "fscanf"
-CONST_SCANF = "scanf"
+CONST_FSCANF = "__isoc99_fscanf"
+CONST_SCANF = "__isoc99_scanf"
 CONST_SPRINTF = "sprintf"
 CONST_SNPRINTF = "snprintf"
 CONST_READ = "read"
@@ -410,16 +410,6 @@ def inspectVulnerability(instruction, vulnFnName):
         dangerousFunction = DangerousFunction(fnName, destAddress, sizeOfDestInt, withEOF, sizeOfSrcInt, srcAddress)
         return inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction)
 
-    if CONST_SCANF in callFnName:
-        fnName = CONST_SCANF
-        destAddress = registersOfFunctions[registersOrder[1]]
-        nameVar, destVariable = getNameAndVariable(destAddress, vulnFnName)
-        sizeOfDestInt = destVariable[CONST_BYTES]
-        sizeOfInputInt = CONST_WRITE_EVERYTHNG - getCountOfAddress(destAddress) #the size to overFlow everything
-        withEOF = False
-        dangerousFunction = DangerousFunction(fnName, destAddress, sizeOfDestInt, withEOF, sizeOfInputInt)
-        return inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction)
-
     if CONST_FSCANF in callFnName:
         fnName = CONST_FSCANF
         destAddress = registersOfFunctions[registersOrder[2]]
@@ -430,9 +420,28 @@ def inspectVulnerability(instruction, vulnFnName):
         dangerousFunction = DangerousFunction(fnName, destAddress, sizeOfDestInt, withEOF, sizeOfInputInt)
         return inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction)
 
-    if CONST_SPRINTF in callFnName:
-        return
+    if CONST_SCANF in callFnName:
+        fnName = CONST_SCANF
+        destAddress = registersOfFunctions[registersOrder[1]]
+        nameVar, destVariable = getNameAndVariable(destAddress, vulnFnName)
+        sizeOfDestInt = destVariable[CONST_BYTES]
+        sizeOfInputInt = CONST_WRITE_EVERYTHNG - getCountOfAddress(destAddress) #the size to overFlow everything
+        withEOF = False
+        dangerousFunction = DangerousFunction(fnName, destAddress, sizeOfDestInt, withEOF, sizeOfInputInt)
+        return inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction)
+
     if CONST_SNPRINTF in callFnName:
+        fnName = CONST_SNPRINTF
+        withEOF = True
+        return
+
+    if CONST_SPRINTF in callFnName:
+        #["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
+        fnName = CONST_SPRINTF
+        destAddress = registersOfFunctions[registersOrder[0]]
+        nameVar, destVariable = getNameAndVariable(destAddress, vulnFnName)
+        
+        withEOF = True
         return
 
     print "No Vulnerability at " + callFnName
