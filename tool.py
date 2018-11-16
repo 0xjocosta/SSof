@@ -52,7 +52,7 @@ CONST_SCORRUPTION = "SCORRUPTION"
 vulnList = (CONST_RBPOFLW,  CONST_RETOFLW, CONST_SCORRUPTION)
 
 #Dangerous functions
-dangerousFunctions = ({"<fgets@plt>": 1}, {"<strcpy@plt>" : 2}, {"<strcat@plt>": 2}, {"<sprintf@plt>": 0}, {"<fscanf@plt>": 0}, {"<scanf@plt>": 0}, {"<gets@plt>": 1}, {"<strncpy@plt>": 2}, {"<strncat@plt>": 2}, {"<snprintf@plt>": 0}, {"<read@plt>": 1})
+dangerousFunctions = ("<fgets@plt>", "<strcpy@plt>", "<strcat@plt>", "<sprintf@plt>", "<fscanf@plt>", "<scanf@plt>", "<gets@plt>", "<strncpy@plt>", "<strncat@plt>", "<snprintf@plt>", "<read@plt>")
 CONST_GETS = "gets"
 CONST_FGETS = "fgets"
 CONST_STRCPY = "strcpy"
@@ -64,6 +64,19 @@ CONST_SCANF = "scanf"
 CONST_SPRINTF = "sprintf"
 CONST_SNPRINTF = "snprintf"
 CONST_READ = "read"
+
+class DangerousFunction(object):
+    """docstring for DangerousFunction."""
+    def __init__(self, fnName, destAddress, sizeOfDestInt, withEOF, sizeOfSrcInt=None, srcAddress=None, sizeOfStrInt=0, endOfStringAddr=None):
+        super(DangerousFunction, self).__init__()
+        self.fnName = fnName
+        self.destAddress = destAddress
+        self.sizeOfDestInt = sizeOfDestInt
+        self.withEOF = withEOF
+        self.srcAddress = srcAddress
+        self.sizeOfSrcInt = sizeOfSrcInt
+        self.sizeOfStrInt = sizeOfStrInt
+        self.endOfStringAddr = endOfStringAddr
 
 #Assembly instructions
 assemblyInstructions = {"basic": ["mov", "lea", "sub", "add"], "advanced": ["cmp", "test", "je", "jmp", "jne"]}
@@ -211,6 +224,16 @@ def getMemoryAddrs(firstAddr, lastAddress):
     memory[firstAddr] = memory[firstAddr]
     return addresses
 
+def getNameAndVariable(addr):
+    destVariable = {}
+    nameVar = ""
+    for var in variablesProgram:
+        variable = variablesProgram[var]
+        if variable[CONST_ADDRESS] in addr:
+            destVariable = variable
+            nameVar = var
+    return nameVar, destVariable
+
 def overflownVariables(addrEOF, nameVar):
     overflwnVariables = []
 
@@ -289,195 +312,142 @@ def checkOverflowType(instruction, nameVar, vulnFnName, fnName, lastAddress):
         print "nothing else"
         return
 
-def inspectVulnerability(instruction, inputs, vulnFnName):
+def inspectVulnerability(instruction, vulnFnName):
     callFnName = instruction[CONST_ARGS][CONST_FNNAME]
 
-    destAddress = registersOfFunctions[registersOrder[0]]
-    destVariable = {}
-
-    nameVar = ""
-    for var in variablesProgram:
-        variable = variablesProgram[var]
-        if variable[CONST_ADDRESS] in destAddress:
-            destVariable = variable
-            nameVar = var
-
-    sizeOfDest = hex(destVariable[CONST_BYTES])
-    sizeOfDestInt = int(sizeOfDest, 0)
-    print destVariable
-
     if CONST_FGETS in callFnName:
-
         sizeOfInputInt = int(registersOfFunctions[CONST_ESI],0)
-        if sizeOfInputInt > sizeOfDestInt:
+        fnName = CONST_FGETS
+        destAddress = registersOfFunctions[registersOrder[0]]
+        nameVar, destVariable = getNameAndVariable(destAddress)
+        sizeOfDestInt = destVariable[CONST_BYTES]
+        withEOF = True
 
-            lastAddress, invalidAddrs = writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, True)
-            if len(invalidAddrs) > 0:
-                outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_INVALIDACC, CONST_FGETS, invalidAddrs[0]))
-            print "Exists Variable Overflow: " + callFnName
-            checkOverflowType(instruction, nameVar, vulnFnName, CONST_FGETS, lastAddress)
-            return True
-
-        else:
-            writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, True)
-            #variablesProgram[nameVar][CONST_BYTES] = sizeOfInputInt
-            print "No Vulnerability at " + callFnName
-            return False
+        dangerousFunction = DangerousFunction(fnName, destAddress, sizeOfDestInt, withEOF, sizeOfInputInt)
+        return inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction)
 
     if CONST_GETS in callFnName:
-
-        print "Exists Variable Overflow: " + callFnName
-        count = getCountOfAddress(destAddress)
-        sizeOfInputInt = CONST_WRITE_EVERYTHNG - count
-        lastAddress, invalidAddrs = writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, False)
-        if len(invalidAddrs) > 0:
-            outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_INVALIDACC, CONST_GETS, invalidAddrs[0]))
-        checkOverflowType(instruction, nameVar, vulnFnName, CONST_GETS, lastAddress)
-        return True
-
-    srcAddress = registersOfFunctions[registersOrder[1]]
-    srcVariable = {}
-    for var in variablesProgram:
-        variable = variablesProgram[var]
-        if variable[CONST_ADDRESS] in srcAddress:
-            srcVariable = variable
-            break
-
-    if CONST_READ in callFnName:
-        sizeOfInputInt = int(registersOfFunctions[CONST_EDX],0)
-        destAddress = srcAddress
-        destVariable = srcVariable
-
-        sizeOfDest = hex(destVariable[CONST_BYTES])
-        sizeOfDestInt = int(sizeOfDest, 0)
-        if sizeOfInputInt > sizeOfDestInt:
-            lastAddress, invalidAddrs = writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, False)
-            if len(invalidAddrs) > 0:
-                outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_INVALIDACC, CONST_READ, invalidAddrs[0]))
-            print "Exists Variable Overflow: " + callFnName
-            checkOverflowType(instruction, nameVar, vulnFnName, CONST_READ, lastAddress)
-            return True
-
-        else:
-            writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, False)
-            #variablesProgram[nameVar][CONST_BYTES] = sizeOfInputInt
-            print "No Vulnerability at " + callFnName
-            return False
-        return
-
-    if CONST_SCANF in callFnName:
-        destAddress = srcAddress
-
-        print "Exists Variable Overflow: " + callFnName
-        count = getCountOfAddress(destAddress)
-        sizeOfInputInt = 10 - count
-        lastAddress, invalidAddrs = writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, False)
-        if len(invalidAddrs) > 0:
-            outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_INVALIDACC, CONST_SCANF, invalidAddrs[0]))
-        checkOverflowType(instruction, nameVar, vulnFnName, CONST_SCANF, lastAddress)
-        return True
-
-    if CONST_FSCANF in callFnName:
-        destAddress = registersOfFunctions[registersOrder[2]]
-        destVariable = {}
-        for var in variablesProgram:
-            variable = variablesProgram[var]
-            if variable[CONST_ADDRESS] in destAddress:
-                destVariable = variable
-                break
-
-        print "Exists Variable Overflow: " + callFnName
-        count = getCountOfAddress(destAddress)
-        sizeOfInputInt = 10 - count
-        lastAddress, invalidAddrs = writeToMemory(destAddress, sizeOfInputInt, CONST_TRASH, False)
-        if len(invalidAddrs) > 0:
-            outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_INVALIDACC, CONST_FSCANF, invalidAddrs[0]))
-        checkOverflowType(instruction, nameVar, vulnFnName, CONST_FSCANF, lastAddress)
-        return True
-
-    if CONST_STRNCAT in callFnName:
-        sizeOfSrcInt = int(registersOfFunctions[CONST_EDX], 0) + 1 #'\0'
-        sizeOfSrc = hex(sizeOfSrcInt)
-        withEOF = True
-
-        endOfStringAddr = getAddrEOF(nameVar)
-        sizeOfStr = getSizeOfBuffer(destAddress) - 1 #free the '\0'
-        print "sizeOfStr -> " + str(sizeOfStr)
-        print "sizeOfSrcInt -> " + str(sizeOfSrcInt)
-        print "sizeOfDestInt -> " + str(sizeOfDestInt)
-        if sizeOfSrcInt + sizeOfStr > sizeOfDestInt:
-            print "Exists Variable Overflow: " + callFnName
-            lastAddress, invalidAddrs = copyToMemory(srcAddress, endOfStringAddr, sizeOfSrcInt, withEOF)
-            if len(invalidAddrs) > 0:
-                outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_INVALIDACC, CONST_STRNCAT, invalidAddrs[0]))
-            print "size of buffer: " + str(getSizeOfBuffer(destAddress))
-            checkOverflowType(instruction, nameVar, vulnFnName, CONST_STRNCAT, lastAddress)
-            return True
-
-        print "No Vulnerability at " + callFnName
-        copyToMemory(srcAddress, endOfStringAddr, sizeOfSrcInt, withEOF)
-        return False
-
-    if CONST_STRCAT in callFnName:
-        sizeOfSrcInt = getSizeOfBuffer(srcAddress)
-        sizeOfSrc = hex(sizeOfSrcInt)
-        withEOF = True
-
-        endOfStringAddr = getAddrEOF(nameVar)
-        sizeOfStr = getSizeOfBuffer(destAddress)
-        if sizeOfSrcInt + sizeOfStr > sizeOfDestInt:
-            print "Exists Variable Overflow: " + callFnName
-            lastAddress, invalidAddrs = copyToMemory(srcAddress, endOfStringAddr, sizeOfSrcInt, withEOF)
-            if len(invalidAddrs) > 0:
-                outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_INVALIDACC, CONST_STRCAT, invalidAddrs[0]))
-            checkOverflowType(instruction, nameVar, vulnFnName, CONST_STRCAT, lastAddress)
-            return True
-
-        print "No Vulnerability at " + callFnName
-        copyToMemory(srcAddress, endOfStringAddr, sizeOfSrcInt, withEOF)
-        return False
-
-    if CONST_STRNCPY in callFnName:
-        sizeOfSrc = registersOfFunctions[CONST_EDX]
-        sizeOfSrcInt = int(registersOfFunctions[CONST_EDX], 0)
+        fnName = CONST_GETS
+        destAddress = registersOfFunctions[registersOrder[0]]
+        nameVar, destVariable = getNameAndVariable(destAddress)
+        sizeOfInputInt = CONST_WRITE_EVERYTHNG - getCountOfAddress(destAddress) #the size to overFlow everything
+        sizeOfDestInt = destVariable[CONST_BYTES]
         withEOF = False
 
-        if sizeOfSrcInt > sizeOfDestInt:
-            print "Exists Variable Overflow: " + callFnName
-            lastAddress, invalidAddrs = copyToMemory(srcAddress, destAddress, sizeOfSrcInt, withEOF)
-            if len(invalidAddrs) > 0:
-                outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_INVALIDACC, CONST_STRNCPY, invalidAddrs[0]))
-            checkOverflowType(instruction, nameVar, vulnFnName, CONST_STRNCPY, lastAddress)
-            return True
+        dangerousFunction = DangerousFunction(fnName, destAddress, sizeOfDestInt, withEOF, sizeOfInputInt)
+        return inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction)
 
-        print "No Vulnerability at " + callFnName
-        copyToMemory(srcAddress, destAddress, sizeOfSrcInt, withEOF)
-        return False
+    if CONST_READ in callFnName:
+        fnName = CONST_READ
+        sizeOfInputInt = int(registersOfFunctions[CONST_EDX],0)
+        destAddress = registersOfFunctions[registersOrder[1]]
+        nameVar, destVariable = getNameAndVariable(destAddress)
+        sizeOfDestInt = destVariable[CONST_BYTES]
+        withEOF = False
 
-    if CONST_STRCPY in callFnName:
+        dangerousFunction = DangerousFunction(fnName, destAddress, sizeOfDestInt, withEOF, sizeOfInputInt)
+        return inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction)
+
+    if CONST_STRNCAT in callFnName:
+        fnName = CONST_STRNCAT
+        srcAddress = registersOfFunctions[registersOrder[1]]
+        sizeOfSrcInt = int(registersOfFunctions[CONST_EDX], 0) + 1 #'\0'
+        destAddress = registersOfFunctions[registersOrder[0]]
+        nameVar, destVariable = getNameAndVariable(destAddress)
+        sizeOfDestInt = destVariable[CONST_BYTES]
+
+        endOfStringAddr = getAddrEOF(nameVar)
+        sizeOfStrInt = getSizeOfBuffer(destAddress) - 1 #free the '\0'
+        withEOF = True
+        dangerousFunction = DangerousFunction(fnName, destAddress, sizeOfDestInt, withEOF, sizeOfSrcInt, srcAddress, sizeOfStrInt, endOfStringAddr)
+        return inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction)
+
+    if CONST_STRCAT in callFnName:
+        fnName = CONST_STRCAT
+        srcAddress = registersOfFunctions[registersOrder[1]]
         sizeOfSrcInt = getSizeOfBuffer(srcAddress)
-        sizeOfSrc = hex(sizeOfSrcInt)
+        destAddress = registersOfFunctions[registersOrder[0]]
+        nameVar, destVariable = getNameAndVariable(destAddress)
+        sizeOfDestInt = destVariable[CONST_BYTES]
+
+        endOfStringAddr = getAddrEOF(nameVar)
+        sizeOfStrInt = getSizeOfBuffer(destAddress)
         withEOF = True
 
-        if sizeOfSrcInt > sizeOfDestInt:
-            print "Exists Variable Overflow: " + callFnName
-            lastAddress, invalidAddrs = copyToMemory(srcAddress, destAddress, sizeOfSrcInt, withEOF)
-            if len(invalidAddrs) > 0:
-                outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_INVALIDACC, CONST_STRCPY, invalidAddrs[0]))
-            checkOverflowType(instruction, nameVar, vulnFnName, CONST_STRCPY, lastAddress)
-            return True
+        dangerousFunction = DangerousFunction(fnName, destAddress, sizeOfDestInt, withEOF, sizeOfSrcInt, srcAddress, sizeOfStrInt, endOfStringAddr)
+        return inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction)
 
-        print "No Vulnerability at " + callFnName
-        copyToMemory(srcAddress, destAddress, sizeOfSrcInt, withEOF)
-        return False
+    if CONST_STRNCPY in callFnName:
+        fnName = CONST_STRNCPY
+        srcAddress = registersOfFunctions[registersOrder[1]]
+        sizeOfSrcInt = int(registersOfFunctions[CONST_EDX], 0)
+        srcAddress = registersOfFunctions[registersOrder[1]]
+
+        destAddress = registersOfFunctions[registersOrder[0]]
+        nameVar, destVariable = getNameAndVariable(destAddress)
+        sizeOfDestInt = destVariable[CONST_BYTES]
+        withEOF = False
+
+        dangerousFunction = DangerousFunction(fnName, destAddress, sizeOfDestInt, withEOF, sizeOfSrcInt, srcAddress)
+        return inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction)
+
+    if CONST_STRCPY in callFnName:
+        fnName = CONST_STRCPY
+        srcAddress = registersOfFunctions[registersOrder[1]]
+        sizeOfSrcInt = getSizeOfBuffer(srcAddress)
+
+        destAddress = registersOfFunctions[registersOrder[0]]
+        nameVar, destVariable = getNameAndVariable(destAddress)
+        sizeOfDestInt = destVariable[CONST_BYTES]
+        withEOF = True
+
+        dangerousFunction = DangerousFunction(fnName, destAddress, sizeOfDestInt, withEOF, sizeOfSrcInt, srcAddress)
+        return inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction)
+
+    if CONST_SCANF in callFnName:
+        fnName = CONST_SCANF
+        destAddress = registersOfFunctions[registersOrder[1]]
+        nameVar, destVariable = getNameAndVariable(destAddress)
+        sizeOfDestInt = destVariable[CONST_BYTES]
+        sizeOfInputInt = CONST_WRITE_EVERYTHNG - getCountOfAddress(destAddress) #the size to overFlow everything
+        withEOF = False
+        dangerousFunction = DangerousFunction(fnName, destAddress, sizeOfDestInt, withEOF, sizeOfInputInt)
+        return inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction)
 
     if CONST_FSCANF in callFnName:
-        return
-
-    if CONST_FSCANF in callFnName:
-        return
+        fnName = CONST_FSCANF
+        destAddress = registersOfFunctions[registersOrder[2]]
+        nameVar, destVariable = getNameAndVariable(destAddress)
+        sizeOfDestInt = destVariable[CONST_BYTES]
+        sizeOfInputInt = CONST_WRITE_EVERYTHNG - getCountOfAddress(destAddress) #the size to overFlow everything
+        withEOF = False
+        dangerousFunction = DangerousFunction(fnName, destAddress, sizeOfDestInt, withEOF, sizeOfInputInt)
+        return inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction)
 
     print "No Vulnerability at " + callFnName
+    return False
+
+def inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction):
+    lastAddress = None
+    invalidAddrs = []
+
+    if dangerousFunction.srcAddress is None:
+        lastAddress, invalidAddrs = writeToMemory(dangerousFunction.destAddress, dangerousFunction.sizeOfSrcInt, CONST_TRASH, dangerousFunction.withEOF)
+    else:
+        if dangerousFunction.endOfStringAddr is None:
+            lastAddress, invalidAddrs = writeToMemory(dangerousFunction.destAddress, dangerousFunction.sizeOfSrcInt, dangerousFunction.srcAddress, dangerousFunction.withEOF)
+        else:
+            lastAddress, invalidAddrs = writeToMemory(dangerousFunction.endOfStringAddr, dangerousFunction.sizeOfSrcInt, dangerousFunction.srcAddress, dangerousFunction.withEOF)
+
+    if dangerousFunction.sizeOfSrcInt + dangerousFunction.sizeOfStrInt > dangerousFunction.sizeOfDestInt:
+        print "Exists Variable Overflow: " + vulnFnName
+        if len(invalidAddrs) > 0:
+            outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_INVALIDACC, dangerousFunction.fnName, invalidAddrs[0]))
+
+        checkOverflowType(instruction, nameVar, vulnFnName, dangerousFunction.fnName, lastAddress)
+        return True
+
+    print "No Vulnerability at " + vulnFnName
     return False
 
 def doRegisterOperation(instruction):
@@ -499,14 +469,14 @@ def doRegisterOperation(instruction):
 def checkOperationCall(instruction):
     functionName = instruction[CONST_ARGS][CONST_FNNAME]
     for func in dangerousFunctions:
-        if functionName in func.keys():
-            return func[functionName]
+        if functionName in func:
+            return True
 
     for fName in jsonProgram:
         if fName in functionName:
             checkFunction(jsonProgram[fName], fName)
-            return -1
-    return -1
+            return False
+    return False
 
 def cleanRegisters():
     for register in registersOfFunctions.keys():
@@ -538,9 +508,8 @@ def checkFunction(function, fnName):
 
         #verifying call function
         if operation == CONST_CALL_OPERATION:
-            index = checkOperationCall(instruction)
-            if index != -1:
-                inspectVulnerability(instruction, index, fnName)
+            if checkOperationCall(instruction):
+                inspectVulnerability(instruction, fnName)
             continue
 
         if operation in assemblyInstructions[CONST_BASIC]:
