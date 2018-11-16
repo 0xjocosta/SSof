@@ -193,8 +193,8 @@ def getSizeOfBuffer(address):
         address = incrementAddress(address)
         size += 1
 
-def getAddrEOF(varName):
-    address = variablesProgram[varName][CONST_ADDRESS]
+def getAddrEOF(varName, fnName):
+    address = variablesProgram[fnName][varName][CONST_ADDRESS]
     address = parseAddress(address)
     while True:
         if address == CONST_LIMIT_ADDR:
@@ -217,26 +217,26 @@ def getMemoryAddrs(firstAddr, lastAddress):
     memory[firstAddr] = memory[firstAddr]
     return addresses
 
-def getNameAndVariable(addr):
+def getNameAndVariable(addr, fnName):
     destVariable = {}
     nameVar = ""
-    for var in variablesProgram:
-        variable = variablesProgram[var]
+    for var in variablesProgram[fnName]:
+        variable = variablesProgram[fnName][var]
         if variable[CONST_ADDRESS] in addr:
             destVariable = variable
             nameVar = var
     return nameVar, destVariable
 
-def overflownVariables(addrEOF, nameVar):
+def overflownVariables(addrEOF, nameVar, fnName):
     overflwnVariables = {}
 
-    overflowerAddr = parseAddress(variablesProgram[nameVar][CONST_ADDRESS])
+    overflowerAddr = parseAddress(variablesProgram[fnName][nameVar][CONST_ADDRESS])
     intOverflowerAddr = getCountOfAddress(overflowerAddr)
 
     addrEOF = parseAddress(addrEOF)
     intEOF = getCountOfAddress(addrEOF)
-    for var in variablesProgram:
-        addrVariable = variablesProgram[var][CONST_ADDRESS]
+    for var in variablesProgram[fnName]:
+        addrVariable = variablesProgram[fnName][var][CONST_ADDRESS]
         addrVariable = parseAddress(addrVariable)
         intAddrVariable = getCountOfAddress(addrVariable)
         if intEOF >= intAddrVariable > intOverflowerAddr and addrVariable != overflowerAddr:
@@ -263,15 +263,17 @@ def outputOverflow(instruction, nameVar, vulnFnName, overflowType, fnName, overF
     return output
 
 def overflowAddrDetector(instruction, lastAddress, nameVar, vulnFnName, fnName):
-    overflowerAddr = parseAddress(variablesProgram[nameVar][CONST_ADDRESS])
+    overflowerAddr = parseAddress(variablesProgram[vulnFnName][nameVar][CONST_ADDRESS])
     lastAddress = parseAddress(lastAddress)
     lastAddress = incrementAddress(lastAddress)
 
-    overflwnVariables = overflownVariables(lastAddress, nameVar)
+    overflwnVariables = overflownVariables(lastAddress, nameVar, vulnFnName)
 
     alreadyInvalid = False
+    print "last: " + lastAddress
     while overflowerAddr != lastAddress:
-        print overflowerAddr
+        print "addr: " + overflowerAddr
+
         if overflowerAddr not in memory and not alreadyInvalid and overflowerAddr != CONST_LIMIT_ADDR:
             outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_INVALIDACC, fnName, overflowerAddr))
             alreadyInvalid = True
@@ -323,7 +325,7 @@ def inspectVulnerability(instruction, vulnFnName):
         sizeOfInputInt = int(registersOfFunctions[CONST_ESI],0)
         fnName = CONST_FGETS
         destAddress = registersOfFunctions[registersOrder[0]]
-        nameVar, destVariable = getNameAndVariable(destAddress)
+        nameVar, destVariable = getNameAndVariable(destAddress, vulnFnName)
         sizeOfDestInt = destVariable[CONST_BYTES]
         withEOF = True
 
@@ -333,7 +335,7 @@ def inspectVulnerability(instruction, vulnFnName):
     if CONST_GETS in callFnName:
         fnName = CONST_GETS
         destAddress = registersOfFunctions[registersOrder[0]]
-        nameVar, destVariable = getNameAndVariable(destAddress)
+        nameVar, destVariable = getNameAndVariable(destAddress, vulnFnName)
         sizeOfInputInt = CONST_WRITE_EVERYTHNG - getCountOfAddress(destAddress) #the size to overFlow everything
         sizeOfDestInt = destVariable[CONST_BYTES]
         withEOF = False
@@ -345,7 +347,7 @@ def inspectVulnerability(instruction, vulnFnName):
         fnName = CONST_READ
         sizeOfInputInt = int(registersOfFunctions[CONST_EDX],0)
         destAddress = registersOfFunctions[registersOrder[1]]
-        nameVar, destVariable = getNameAndVariable(destAddress)
+        nameVar, destVariable = getNameAndVariable(destAddress, vulnFnName)
         sizeOfDestInt = destVariable[CONST_BYTES]
         withEOF = False
 
@@ -357,10 +359,10 @@ def inspectVulnerability(instruction, vulnFnName):
         srcAddress = registersOfFunctions[registersOrder[1]]
         sizeOfSrcInt = int(registersOfFunctions[CONST_EDX], 0) + 1 #'\0'
         destAddress = registersOfFunctions[registersOrder[0]]
-        nameVar, destVariable = getNameAndVariable(destAddress)
+        nameVar, destVariable = getNameAndVariable(destAddress, vulnFnName)
         sizeOfDestInt = destVariable[CONST_BYTES]
 
-        endOfStringAddr = getAddrEOF(nameVar)
+        endOfStringAddr = getAddrEOF(nameVar, vulnFnName)
         sizeOfStrInt = getSizeOfBuffer(destAddress) - 1 #free the '\0'
         withEOF = True
         dangerousFunction = DangerousFunction(fnName, destAddress, sizeOfDestInt, withEOF, sizeOfSrcInt, srcAddress, sizeOfStrInt, endOfStringAddr)
@@ -371,10 +373,10 @@ def inspectVulnerability(instruction, vulnFnName):
         srcAddress = registersOfFunctions[registersOrder[1]]
         sizeOfSrcInt = getSizeOfBuffer(srcAddress)
         destAddress = registersOfFunctions[registersOrder[0]]
-        nameVar, destVariable = getNameAndVariable(destAddress)
+        nameVar, destVariable = getNameAndVariable(destAddress, vulnFnName)
         sizeOfDestInt = destVariable[CONST_BYTES]
 
-        endOfStringAddr = getAddrEOF(nameVar)
+        endOfStringAddr = getAddrEOF(nameVar, vulnFnName)
         sizeOfStrInt = getSizeOfBuffer(destAddress)
         withEOF = True
 
@@ -388,7 +390,7 @@ def inspectVulnerability(instruction, vulnFnName):
         srcAddress = registersOfFunctions[registersOrder[1]]
 
         destAddress = registersOfFunctions[registersOrder[0]]
-        nameVar, destVariable = getNameAndVariable(destAddress)
+        nameVar, destVariable = getNameAndVariable(destAddress, vulnFnName)
         sizeOfDestInt = destVariable[CONST_BYTES]
         withEOF = False
 
@@ -401,7 +403,7 @@ def inspectVulnerability(instruction, vulnFnName):
         sizeOfSrcInt = getSizeOfBuffer(srcAddress)
 
         destAddress = registersOfFunctions[registersOrder[0]]
-        nameVar, destVariable = getNameAndVariable(destAddress)
+        nameVar, destVariable = getNameAndVariable(destAddress, vulnFnName)
         sizeOfDestInt = destVariable[CONST_BYTES]
         withEOF = True
 
@@ -411,7 +413,7 @@ def inspectVulnerability(instruction, vulnFnName):
     if CONST_SCANF in callFnName:
         fnName = CONST_SCANF
         destAddress = registersOfFunctions[registersOrder[1]]
-        nameVar, destVariable = getNameAndVariable(destAddress)
+        nameVar, destVariable = getNameAndVariable(destAddress, vulnFnName)
         sizeOfDestInt = destVariable[CONST_BYTES]
         sizeOfInputInt = CONST_WRITE_EVERYTHNG - getCountOfAddress(destAddress) #the size to overFlow everything
         withEOF = False
@@ -421,12 +423,17 @@ def inspectVulnerability(instruction, vulnFnName):
     if CONST_FSCANF in callFnName:
         fnName = CONST_FSCANF
         destAddress = registersOfFunctions[registersOrder[2]]
-        nameVar, destVariable = getNameAndVariable(destAddress)
+        nameVar, destVariable = getNameAndVariable(destAddress, vulnFnName)
         sizeOfDestInt = destVariable[CONST_BYTES]
         sizeOfInputInt = CONST_WRITE_EVERYTHNG - getCountOfAddress(destAddress) #the size to overFlow everything
         withEOF = False
         dangerousFunction = DangerousFunction(fnName, destAddress, sizeOfDestInt, withEOF, sizeOfInputInt)
         return inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction)
+
+    if CONST_SPRINTF in callFnName:
+        return
+    if CONST_SNPRINTF in callFnName:
+        return
 
     print "No Vulnerability at " + callFnName
     return False
@@ -497,9 +504,10 @@ def initializeMemory(function):
         writeToMemory(address, dic[address], CONST_ZERO, True)
 
 def checkFunction(function, fnName):
+    variablesProgram[fnName] = {}
     for var in function[CONST_VARIABLES]:
         nameVar = var[CONST_NAME]
-        variablesProgram[nameVar] = var
+        variablesProgram[fnName][nameVar] = var
     initializeMemory(function)
 
     instructions = function[CONST_INSTRUCTIONS]

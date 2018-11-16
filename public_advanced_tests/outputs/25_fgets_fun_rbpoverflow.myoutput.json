@@ -1,1 +1,1 @@
-[{"fnname": "strcpy", "vuln_function": "fun1", "vulnerability": "VAROVERFLOW", "overflow_var": "buf2", "overflown_var": "control", "address": "400581"}, {"vulnerability": "RBPOVERFLOW", "overflow_var": "buf2", "vuln_function": "fun1", "fnname": "strcpy", "address": "400581"}]
+[{"vulnerability": "RBPOVERFLOW", "overflow_var": "buf2", "vuln_function": "fun1", "fnname": "strcpy", "address": "400581"}]
