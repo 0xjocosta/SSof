@@ -516,8 +516,11 @@ def checkFunction(function, fnName):
 
     cleanRegisters()
 
-def settingName(fileName):
+def settingBasicName(fileName):
     return fileName[:19] + "outputs/" + fileName[19:-5] + ".myoutput.json"
+
+def settingAdvancedName(fileName):
+    return fileName[:22] + "outputs/" + fileName[22:-5] + ".myoutput.json"
 
 #Main
 if(len(sys.argv) < 2):
@@ -530,5 +533,9 @@ with open(fileName) as json_data:
 
 checkFunction(jsonProgram[CONST_MAIN], CONST_MAIN)
 print outputJSON
-with open(settingName(fileName), 'w') as outfile:
-    json.dump(outputJSON, outfile)
+if "basic" in fileName:
+    with open(settingBasicName(fileName), 'w') as outfile:
+        json.dump(outputJSON, outfile)
+if "advanced" in fileName:
+    with open(settingAdvancedName(fileName), 'w') as outfile:
+        json.dump(outputJSON, outfile)

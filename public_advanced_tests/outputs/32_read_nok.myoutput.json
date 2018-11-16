@@ -1,0 +1,1 @@
+[{"overflown_address": "rbp-0x10", "fnname": "read", "vuln_function": "main", "vulnerability": "INVALIDACCS", "overflow_var": "buf1", "address": "4004f7"}, {"fnname": "read", "vuln_function": "main", "vulnerability": "VAROVERFLOW", "overflow_var": "buf1", "overflown_var": "control", "address": "4004f7"}]

@@ -7,7 +7,7 @@ int main() {
   int control;
   char buf3[32];
   char buf2[32];
-  char buf1[64];
+  char buf1[32];
 
   control = 21;
   fgets(buf1, 34, stdin);

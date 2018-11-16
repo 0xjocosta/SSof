@@ -5,13 +5,13 @@
         "overflown_var": "buf2",
         "vulnerability": "VAROVERFLOW",
         "overflow_var": "buf1",
-        "address": "40058f"
+        "address": "400589"
     },
     {
         "overflown_address": "rbp-0x10",
         "fnname": "strcpy",
         "vuln_function": "main",
-        "address": "4005a5",
+        "address": "40059c",
         "vulnerability": "INVALIDACCS",
         "overflow_var": "buf3"
     }
