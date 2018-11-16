@@ -277,6 +277,7 @@ def overflowAddrDetector(instruction, lastAddress, nameVar, vulnFnName, fnName):
             alreadyInvalid = True
 
         if overflowerAddr in overflwnVariables:
+            alreadyInvalid = False
             outputJSON.append(outputOverflow(instruction, nameVar, vulnFnName, CONST_VAROFLW, fnName, overflwnVariables[overflowerAddr]))
 
         overflowerAddr = incrementAddress(overflowerAddr)
