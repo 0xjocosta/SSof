@@ -1,0 +1,1 @@
+[{"fnname": "strcpy", "overflow_var": "buf2", "vuln_function": "fun1", "address": "400581", "vulnerability": "RBPOVERFLOW"}]

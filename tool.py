@@ -98,7 +98,6 @@ registerOperations = {"sub": "-", "add": "+"}
 
 #Registers
 registers = ["rax", "rbx", "rcx", "rdx", "rdi", "rsi", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "rbp", "rsp", "rip"]
-registersOfFunctions = {}
 registersOrder = ["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
 
 #Program JSON
@@ -166,8 +165,6 @@ class Branch(object):
 
     def writeToMemory(self, addr, size, value, withEOF):
         addr = self.parseAddress(addr)
-        print "first addr: " + addr
-        print "size: " + str(size)
         count = self.getCountOfAddress(addr)
         maxSize = count + size - 1
         while(count != maxSize):
@@ -312,7 +309,6 @@ class Branch(object):
             overflowerAddr = self.parseAddress((instruction[CONST_ARGS][CONST_DEST]).split()[-1])
 
         alreadyInvalid = False
-        print "last: " + lastAddress
         lastPLUSoneAddress = self.incrementAddress(lastAddress)
         while overflowerAddr != lastPLUSoneAddress:
             if overflowerAddr not in self.memory and not alreadyInvalid and overflowerAddr != CONST_LIMIT_ADDR:
@@ -332,30 +328,29 @@ class Branch(object):
     def checkOverflowType(self, instruction, nameVar, vulnFnName, fnName, lastAddress):
         lastAddress = self.parseAddress(lastAddress)
 
-        print "Writed last address: " + lastAddress
         value = self.getCountOfAddress(lastAddress)
 
         if CONST_PLUS in lastAddress:
             if value >= 16:
-                print "overflow vars, rbp, retAddr, SCORRUPTION"
+
                 self.overflowAddrDetector(instruction, lastAddress, nameVar, vulnFnName, fnName)
                 for i in range(len(vulnList)):
                     outputJSON.append(self.outputOverflow(instruction, nameVar, vulnFnName, vulnList[i], fnName))
 
             elif value >= 8:
-                print "overflow vars, rbp, retAddr"
+
                 self.overflowAddrDetector(instruction, lastAddress, nameVar, vulnFnName, fnName)
                 for i in range(len(vulnList)-1):
                     outputJSON.append(self.outputOverflow(instruction, nameVar, vulnFnName, vulnList[i], fnName))
 
             elif value >= 0:
-                print "overflow vars, rbp"
+
                 self.overflowAddrDetector(instruction, lastAddress, nameVar, vulnFnName, fnName)
                 for i in range(len(vulnList)-2):
                     outputJSON.append(self.outputOverflow(instruction, nameVar, vulnFnName, vulnList[i], fnName))
 
         elif CONST_MINUS in lastAddress:
-            print "overflow vars"
+
             self.overflowAddrDetector(instruction, lastAddress, nameVar, vulnFnName, fnName)
 
         else:
@@ -480,7 +475,6 @@ class Branch(object):
             return self.inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction)
 
         if CONST_SNPRINTF in callFnName:
-            #["rdi", "rsi", "rdx", "rcx", "r8", "r9"]
             fnName = CONST_SNPRINTF
             withEOF = True
             destAddress = self.registersOfFunctions[registersOrder[0]]
@@ -523,7 +517,6 @@ class Branch(object):
             dangerousFunction = DangerousFunction(fnName, destAddress, sizeOfDestInt, withEOF, sizeOfInputInt, srcBuffers)
             return self.inspectDangerousFunction(instruction, nameVar, vulnFnName, dangerousFunction)
 
-        print "No Vulnerability at " + callFnName
         return False
 
     def inspectDangerousFunction(self, instruction, nameVar, vulnFnName, dangerousFunction):
@@ -547,23 +540,18 @@ class Branch(object):
                     lastAddress = self.writeToMemory(dangerousFunction.endOfStringAddr, dangerousFunction.srcBuffers[srcAddress], srcAddress, dangerousFunction.withEOF)
 
         if dangerousFunction.sizeOfInputInt + dangerousFunction.sizeOfStrInt > dangerousFunction.sizeOfDestInt:
-            print "Exists Variable Overflow: " + vulnFnName
             self.checkOverflowType(instruction, nameVar, vulnFnName, dangerousFunction.fnName, lastAddress)
             return True
-
-        print "No Vulnerability at " + vulnFnName
         return False
 
     def doAdvancedOperations(self, instruction, vulnFnName):
         operation = instruction[CONST_OPERATION]
         if operation == CONST_JMP:
             destAddr = instruction[CONST_ARGS][CONST_ADDRESS]
-            print destAddr
             instruction = self.getInstructionByAddress(vulnFnName, destAddr)
             return instruction[CONST_POS]
         elif operation == CONST_JNE or operation == CONST_JE:
             destAddr = instruction[CONST_ARGS][CONST_ADDRESS]
-            print destAddr
             instruction = self.getInstructionByAddress(vulnFnName, destAddr)
             branchName = CONST_BRANCH + str(COUNTER)
             branch = Branch(self.nameBranch, self.memory, self.registersOfFunctions, self.variablesProgram)
@@ -644,11 +632,8 @@ class Branch(object):
         self.initializeMemory(function)
 
         instructions = function[CONST_INSTRUCTIONS]
-        print "N instructions: " + str(nInstructions)
 
         while position < nInstructions:
-            if self.nameBranch == (CONST_BRANCH + str(0)):
-                print "position: " + str(position)
             instruction = self.getInstructionByPosition(fnName, position)
             operation = instruction[CONST_OPERATION]
 
@@ -684,13 +669,13 @@ class Branch(object):
         return {}
 
 
-
-def settingBasicName(fileName):
-    return fileName[:19] + "outputs/" + fileName[19:-5] + ".myoutput.json"
-
-def settingAdvancedName(fileName):
-    return fileName[:22] + "outputs/" + fileName[22:-5] + ".myoutput.json"
-
+##########################################################################
+        ######      ######     ######      #######
+        #           #          #    #      #
+        ######      ######     #    #      #######
+             #           #     #    #      #
+        ######      ######     ######      #
+##########################################################################
 #Main
 if(len(sys.argv) < 2):
     print "No program received!"
@@ -707,14 +692,5 @@ position = 0
 branchMain = Branch(branch)
 
 branchMain.run(CONST_MAIN, position)
-
-
-
-#checkFunction(jsonProgram[CONST_MAIN], CONST_MAIN, position, branch)
-print outputJSON
-if "basic" in fileName:
-    with open(settingBasicName(fileName), 'w') as outfile:
-        json.dump(outputJSON, outfile)
-if "advanced" in fileName:
-    with open(settingAdvancedName(fileName), 'w') as outfile:
-        json.dump(outputJSON, outfile)
+with open(fileName[:-5] + ".output.json", 'w') as outfile:
+    json.dump(outputJSON, outfile)
